@@ -10,8 +10,15 @@
 </head>
 <body>
 <canvas id="game"></canvas>
+
 <audio id="shootSound" src="https://www.soundjay.com/mechanical/sounds/mechanical-clonk-1.mp3"></audio>
-<audio id="deathSound" src="https://www.soundjay.com/human/sounds/scream-01.mp3"></audio>
+
+<audio id="backgroundMusic" src="https://www.soundjay.com/free-music/sounds/jungle-run-01.mp3" loop></audio>
+
+<audio id="victorySound" src="https://www.soundjay.com/human/sounds/applause-8.mp3"></audio>
+
+<audio id="looseSound" src="https://www.soundjay.com/human/sounds/man-scream-01.mp3"></audio>
+
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -22,6 +29,7 @@ canvas.height = window.innerHeight;
 let keys = {}, mouseX = canvas.width / 2, mouseY = canvas.height / 2;
 let gravity = 1, floor = canvas.height - 50;
 let lastPlayerShot = 0, gameOver = false;
+let gameWon = false; // Nova variável para indicar vitória
 let score = 0, kills = 0;
 let powerups = [], powerupMessages = [];
 let shootCooldown = 500;
@@ -31,6 +39,9 @@ let boss = null;
 let images = {};
 let backgroundImage = new Image();
 backgroundImage.src = 'fundojogo.jpg';
+
+// Controle de áudio
+let musicStarted = false;
 
 // Pré-carregar imagens
 function loadImages() {
@@ -56,6 +67,36 @@ function loadImages() {
       img.src = src;
     }
   });
+}
+
+// Função para iniciar música de fundo
+function startBackgroundMusic() {
+  if (!musicStarted) {
+    const bgMusic = document.getElementById("backgroundMusic");
+    bgMusic.volume = 0.3; // Volume baixo para não incomodar
+    bgMusic.play().catch(e => console.log("Erro ao tocar música:", e));
+    musicStarted = true;
+  }
+}
+
+// Função para parar música de fundo
+function stopBackgroundMusic() {
+  const bgMusic = document.getElementById("backgroundMusic");
+  bgMusic.pause();
+  bgMusic.currentTime = 0;
+}
+
+// Função para tocar som de vitória
+function playVictorySound() {
+  const victorySound = document.getElementById("victorySound");
+  victorySound.volume = 0.7;
+  victorySound.play().catch(e => console.log("Erro ao tocar som de vitória:", e));
+}
+
+function playLooseSound() {
+  const victorySound = document.getElementById("looseSound");
+  victorySound.volume = 0.7;
+  victorySound.play().catch(e => console.log("Erro ao tocar som de derrota:", e));
 }
 
 class Player {
@@ -97,31 +138,70 @@ class Player {
 class Alien {
   constructor(x, type) {
     this.x = x;
-    this.y = Math.random() * (canvas.height - 250) + 50;
+    this.y = Math.random() * (canvas.height - 300) + 100; // Posição inicial mais controlada
     this.width = 50; this.height = 50;
     this.type = type;
     this.hp = { green: 1, yellow: 3, red: 5 }[type];
     this.maxHp = this.hp;
     this.color = { green: "green", yellow: "yellow", red: "red" }[type];
     this.lastShot = 0;
-    this.angle = Math.random() * Math.PI * 2;
-    this.speed = 2 + Math.random() * 2;
-    this.amplitude = 50 + Math.random() * 50;
-    this.oscillationSpeed = 0.02 + Math.random() * 0.03;
-    this.startTime = Date.now();
-  }
-  update() {
-    // Movimento de zigue-zague
-    const time = (Date.now() - this.startTime) * 0.001;
-    this.x -= this.speed;
-    this.y += Math.sin(time * this.oscillationSpeed) * this.amplitude;
     
-    // Se sair da tela, reposiciona no final
+    // Sistema de movimento aleatório melhorado
+    this.speed = 1.5 + Math.random() * 1.5; // Velocidade horizontal
+    this.vx = -this.speed; // Sempre se move para a esquerda
+    this.vy = 0; // Velocidade vertical
+    
+    // Controle de direção vertical
+    this.verticalSpeed = 0.5 + Math.random() * 1;
+    this.verticalDirection = Math.random() > 0.5 ? 1 : -1;
+    this.changeDirectionTimer = 0;
+    this.changeDirectionInterval = 60 + Math.random() * 120; // Muda direção a cada 1-3 segundos
+    
+    // Limites de movimento vertical
+    this.minY = 50;
+    this.maxY = canvas.height - 150;
+  }
+  
+  update() {
+    // Movimento horizontal constante
+    this.x += this.vx;
+    
+    // Sistema de movimento vertical aleatório
+    this.changeDirectionTimer++;
+    
+    // Muda direção vertical aleatoriamente ou quando atinge limites
+    if (this.changeDirectionTimer >= this.changeDirectionInterval || 
+        this.y <= this.minY || this.y >= this.maxY) {
+      
+      this.verticalDirection *= -1;
+      this.changeDirectionTimer = 0;
+      this.changeDirectionInterval = 60 + Math.random() * 120;
+      this.verticalSpeed = 0.5 + Math.random() * 1.5;
+    }
+    
+    // Aplica movimento vertical
+    this.vy = this.verticalDirection * this.verticalSpeed;
+    this.y += this.vy;
+    
+    // Garante que não saia dos limites
+    if (this.y < this.minY) {
+      this.y = this.minY;
+      this.verticalDirection = 1;
+    }
+    if (this.y > this.maxY) {
+      this.y = this.maxY;
+      this.verticalDirection = -1;
+    }
+    
+    // Se sair da tela pela esquerda, reposiciona na direita
     if (this.x < -this.width) {
       this.x = canvas.width + Math.random() * 200;
-      this.y = Math.random() * (canvas.height - 250) + 50;
+      this.y = Math.random() * (this.maxY - this.minY) + this.minY;
+      this.verticalDirection = Math.random() > 0.5 ? 1 : -1;
+      this.changeDirectionTimer = 0;
     }
   }
+  
   draw() {
     const imgKey = this.type;
     if (images[imgKey]) {
@@ -152,17 +232,43 @@ class Boss {
     this.hp = 12;
     this.lastHorizontalShot = 0;
     this.lastVerticalShot = 0;
-    this.oscillationSpeed = 0.01;
-    this.amplitude = 100;
-    this.startTime = Date.now();
-  }
-  update() {
-    const time = (Date.now() - this.startTime) * 0.001;
-    this.x -= 1;
-    this.y = canvas.height / 2 + Math.sin(time * this.oscillationSpeed) * this.amplitude;
     
-    if (this.x < canvas.width - 300) this.x = canvas.width - 300;
+    // Movimento controlado do boss
+    this.vy = 0;
+    this.verticalDirection = 1;
+    this.verticalSpeed = 1;
+    this.changeDirectionTimer = 0;
+    this.minY = 100;
+    this.maxY = canvas.height - 200;
   }
+  
+  update() {
+    // Movimento horizontal
+    this.x -= 1;
+    if (this.x < canvas.width - 300) this.x = canvas.width - 300;
+    
+    // Movimento vertical controlado
+    this.changeDirectionTimer++;
+    
+    if (this.changeDirectionTimer >= 120 || this.y <= this.minY || this.y >= this.maxY) {
+      this.verticalDirection *= -1;
+      this.changeDirectionTimer = 0;
+    }
+    
+    this.vy = this.verticalDirection * this.verticalSpeed;
+    this.y += this.vy;
+    
+    // Limites
+    if (this.y < this.minY) {
+      this.y = this.minY;
+      this.verticalDirection = 1;
+    }
+    if (this.y > this.maxY) {
+      this.y = this.maxY;
+      this.verticalDirection = -1;
+    }
+  }
+  
   draw() {
     if (images.boss) {
       ctx.drawImage(images.boss, this.x - this.width/2, this.y - this.height/2, this.width, this.height);
@@ -286,6 +392,10 @@ function checkCollisions() {
           if (boss.hp <= 0) {
             bossActive = false;
             score += 5; // Bônus por matar o boss
+            gameOver = true; // Ativa tela de fim de jogo
+            gameWon = true; // Nova variável para indicar vitória
+            stopBackgroundMusic(); // Para a música de fundo
+            playVictorySound(); // Toca som de vitória
           }
         }
       }
@@ -295,7 +405,7 @@ function checkCollisions() {
       let dy = b.y - (player.y - player.height / 2);
       if (Math.abs(dx) < 30 && Math.abs(dy) < 40) {
         if (shield > 0) shield -= 25;
-        else player.health -= b.isBoss ? 10 : 5;
+        else player.health -= b.isBoss ? 40 : 20;
         bullets.splice(bi, 1);
       }
     }
@@ -327,7 +437,8 @@ function checkCollisions() {
   });
 
   if (player.health <= 0) {
-    document.getElementById("deathSound").play();
+    stopBackgroundMusic();
+    playLooseSound()
     gameOver = true;
   }
 }
@@ -341,7 +452,7 @@ function spawnHorde() {
 function spawnPowerUp(x, y) {
   const types = ["speed", "shield", "health"];
   const type = types[Math.floor(Math.random() * types.length)];
-  powerups.push(new PowerUp(x, y, type));
+  powerups.push(new PowerUp(x, floor - 10, type)); // Sempre no chão
 }
 
 function alienFire() {
@@ -435,13 +546,13 @@ function drawHUD() {
 function drawGameOver() {
   ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "white";
+  ctx.fillStyle = gameWon ? "gold" : "red";
   ctx.font = "60px sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("VOCÊ MORREU", canvas.width / 2, canvas.height / 2);
+  ctx.fillText(gameWon ? "VOCÊ VENCEU!" : "VOCÊ MORREU", canvas.width / 2, canvas.height / 2);
   ctx.font = "30px sans-serif";
   ctx.fillText("Pontuação Final: " + score, canvas.width / 2, canvas.height / 2 + 60);
-  ctx.fillText("Clique para recomeçar", canvas.width / 2, canvas.height / 2 + 120);
+  ctx.fillText("Pressione ESPAÇO para recomeçar", canvas.width / 2, canvas.height / 2 + 120);
 }
 
 function gameLoop() {
@@ -486,12 +597,14 @@ function restartGame() {
   powerups = [];
   powerupMessages = [];
   gameOver = false;
+  gameWon = false; // Reseta estado de vitória
   score = 0;
   kills = 0;
   shield = 0;
   shootCooldown = 500;
   bossActive = false;
   boss = null;
+  musicStarted = false; // Permite reiniciar a música
   spawnHorde();
   gameLoop();
 }
@@ -502,22 +615,36 @@ loadImages().then(() => {
   gameLoop();
 });
 
-// Controles
-document.addEventListener("keydown", e => keys[e.code] = true);
+// Controles de movimento
 document.addEventListener("keyup", e => keys[e.code] = false);
+
+// Controle de teclas com funcionalidades especiais
+document.addEventListener("keydown", e => {
+  keys[e.code] = true;
+  
+  // Inicia música na primeira interação
+  startBackgroundMusic();
+  
+  // Reinicia o jogo com Espaço quando estiver na tela de game over
+  if (e.code === "Space" && gameOver) {
+    e.preventDefault(); // Evita scroll da página
+    restartGame();
+  }
+});
 
 canvas.addEventListener("mousemove", e => {
   mouseX = e.clientX;
   mouseY = e.clientY;
 });
 
+// Controle de tiro com mouse (sem restart)
 canvas.addEventListener("click", e => {
-  if (gameOver) {
-    restartGame();
-    return;
-  }
+  // Inicia música na primeira interação do usuário
+  startBackgroundMusic();
+  
+  // Remove a condição de restart aqui - agora só atira
   const now = Date.now();
-  if (now - lastPlayerShot > shootCooldown) {
+  if (!gameOver && now - lastPlayerShot > shootCooldown) {
     let angle = Math.atan2(mouseY - (player.y - player.height / 2), mouseX - player.x);
     bullets.push(new Bullet(player.x + 20, player.y - 30, angle));
     lastPlayerShot = now;
