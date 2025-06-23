@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Macaco vs Aliens</title>
+  <meta charset="UTF-8">
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<audio id="shootSound" src="https://www.soundjay.com/mechanical/sounds/mechanical-clonk-1.mp3"></audio>
+<audio id="deathSound" src="https://www.soundjay.com/human/sounds/scream-01.mp3"></audio>
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// Variáveis do jogo
+let keys = {}, mouseX = canvas.width / 2, mouseY = canvas.height / 2;
+let gravity = 1, floor = canvas.height - 50;
+let lastPlayerShot = 0, gameOver = false;
+let score = 0, kills = 0;
+let powerups = [], powerupMessages = [];
+let shootCooldown = 500;
+let shield = 0;
+let bossActive = false;
+let boss = null;
+let images = {};
+let backgroundImage = new Image();
+backgroundImage.src = 'fundojogo.jpg';
+
+// Pré-carregar imagens
+function loadImages() {
+  const imageList = {
+    player: 'macacoplayer.png',
+    yellow: 'olhoamarelo.png',
+    green: 'olhoverde.png',
+    red: 'olhovermelho.png',
+    boss: 'naveboss.png'
+  };
+  
+  let loaded = 0;
+  const total = Object.keys(imageList).length;
+  
+  return new Promise((resolve) => {
+    for (const [key, src] of Object.entries(imageList)) {
+      const img = new Image();
+      img.onload = () => {
+        images[key] = img;
+        loaded++;
+        if (loaded === total) resolve();
+      };
+      img.src = src;
+    }
+  });
+}
+
+class Player {
+  constructor() {
+    this.x = 100; this.y = floor;
+    this.vx = 0; this.vy = 0;
+    this.width = 40; this.height = 60;
+    this.health = 100;
+    this.jump = false; this.onGround = true;
+    this.direction = 1;
+  }
+  update() {
+    if (keys["KeyA"] && this.x > 50) this.vx = -5;
+    else if (keys["KeyD"] && this.x < canvas.width - 50) this.vx = 5;
+    else this.vx = 0;
+    if (keys["KeyW"] && this.onGround) {
+      this.vy = -15;
+      this.onGround = false;
+    }
+    this.vy += gravity;
+    this.x += this.vx;
+    this.y += this.vy;
+    if (this.y >= floor) {
+      this.y = floor;
+      this.vy = 0;
+      this.onGround = true;
+    }
+  }
+  draw() {
+    if (images.player) {
+      ctx.drawImage(images.player, this.x, this.y - this.height, this.width, this.height);
+    } else {
+      ctx.fillStyle = "brown";
+      ctx.fillRect(this.x, this.y - this.height, this.width, this.height);
+    }
+  }
+}
+
+class Alien {
+  constructor(x, type) {
+    this.x = x;
+    this.y = Math.random() * (canvas.height - 250) + 50;
+    this.width = 50; this.height = 50;
+    this.type = type;
+    this.hp = { green: 1, yellow: 3, red: 5 }[type];
+    this.maxHp = this.hp;
+    this.color = { green: "green", yellow: "yellow", red: "red" }[type];
+    this.lastShot = 0;
+    this.angle = Math.random() * Math.PI * 2;
+    this.speed = 2 + Math.random() * 2;
+    this.amplitude = 50 + Math.random() * 50;
+    this.oscillationSpeed = 0.02 + Math.random() * 0.03;
+    this.startTime = Date.now();
+  }
+  update() {
+    // Movimento de zigue-zague
+    const time = (Date.now() - this.startTime) * 0.001;
+    this.x -= this.speed;
+    this.y += Math.sin(time * this.oscillationSpeed) * this.amplitude;
+    
+    // Se sair da tela, reposiciona no final
+    if (this.x < -this.width) {
+      this.x = canvas.width + Math.random() * 200;
+      this.y = Math.random() * (canvas.height - 250) + 50;
+    }
+  }
+  draw() {
+    const imgKey = this.type;
+    if (images[imgKey]) {
+      ctx.drawImage(images[imgKey], this.x - this.width/2, this.y - this.height/2, this.width, this.height);
+    } else {
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.width/2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Barra de HP
+    if (this.hp < this.maxHp) {
+      ctx.fillStyle = "red";
+      ctx.fillRect(this.x - this.width/2, this.y - this.height/2 - 10, this.width, 5);
+      ctx.fillStyle = "lime";
+      ctx.fillRect(this.x - this.width/2, this.y - this.height/2 - 10, 
+                   this.width * (this.hp / this.maxHp), 5);
+    }
+  }
+}
+
+class Boss {
+  constructor() {
+    this.x = canvas.width + 200;
+    this.y = canvas.height / 2;
+    this.width = 150; this.height = 100;
+    this.hp = 12;
+    this.lastHorizontalShot = 0;
+    this.lastVerticalShot = 0;
+    this.oscillationSpeed = 0.01;
+    this.amplitude = 100;
+    this.startTime = Date.now();
+  }
+  update() {
+    const time = (Date.now() - this.startTime) * 0.001;
+    this.x -= 1;
+    this.y = canvas.height / 2 + Math.sin(time * this.oscillationSpeed) * this.amplitude;
+    
+    if (this.x < canvas.width - 300) this.x = canvas.width - 300;
+  }
+  draw() {
+    if (images.boss) {
+      ctx.drawImage(images.boss, this.x - this.width/2, this.y - this.height/2, this.width, this.height);
+    } else {
+      ctx.fillStyle = "purple";
+      ctx.fillRect(this.x - this.width/2, this.y - this.height/2, this.width, this.height);
+    }
+    
+    // Barra de HP
+    ctx.fillStyle = "red";
+    ctx.fillRect(this.x - this.width/2, this.y - this.height/2 - 15, this.width, 10);
+    ctx.fillStyle = "lime";
+    ctx.fillRect(this.x - this.width/2, this.y - this.height/2 - 15, 
+                 this.width * (this.hp / 12), 10);
+  }
+}
+
+class Bullet {
+  constructor(x, y, angle, isAlien = false, isBoss = false) {
+    this.x = x; this.y = y;
+    this.vx = Math.cos(angle) * (isBoss ? 7 : 10);
+    this.vy = Math.sin(angle) * (isBoss ? 7 : 10);
+    this.isAlien = isAlien;
+    this.isBoss = isBoss;
+    this.size = isBoss ? 10 : 5;
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+  }
+  draw() {
+    if (this.isBoss) {
+      ctx.fillStyle = "purple";
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = this.isAlien ? "red" : "white";
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+class PowerUp {
+  constructor(x, y, type) {
+    this.x = x;
+    this.y = y;
+    this.size = 20;
+    this.type = type;
+    this.color = { speed: "blue", shield: "yellow", health: "lime" }[type];
+    this.message = {
+      speed: "Velocidade de Tiro Aumentada!",
+      shield: "Escudo Ativado!",
+      health: "Vida Recuperada!"
+    }[type];
+  }
+  draw() {
+    ctx.fillStyle = this.color;
+    ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+  }
+}
+
+let player = new Player();
+let bullets = [];
+let aliens = [];
+
+function spawnAlien() {
+  if (bossActive || aliens.length >= 5) return;
+  
+  const types = ["green", "yellow", "red"];
+  const type = types[Math.floor(Math.random() * 3)];
+  
+  aliens.push(new Alien(canvas.width + Math.random() * 200, type));
+}
+
+function spawnBoss() {
+  bossActive = true;
+  boss = new Boss();
+}
+
+function checkCollisions() {
+  bullets.forEach((b, bi) => {
+    if (!b.isAlien && !b.isBoss) {
+      // Tiros do jogador contra aliens
+      aliens.forEach((a, ai) => {
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < a.width/2) {
+          a.hp--;
+          bullets.splice(bi, 1);
+          if (a.hp <= 0) {
+            aliens.splice(ai, 1);
+            score++;
+            kills++;
+            
+            // A cada 3 kills, spawna nova horda e dá power-up
+            if (kills % 3 === 0) {
+              spawnHorde();
+              spawnPowerUp(a.x, a.y);
+            }
+            
+            // Checar se precisa spawnar boss
+            if (score >= 12 && !bossActive) {
+              spawnBoss();
+            }
+          }
+        }
+      });
+      
+      // Tiros do jogador contra boss
+      if (bossActive) {
+        let dx = b.x - boss.x;
+        let dy = b.y - boss.y;
+        let dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < boss.width/2) {
+          boss.hp--;
+          bullets.splice(bi, 1);
+          if (boss.hp <= 0) {
+            bossActive = false;
+            score += 5; // Bônus por matar o boss
+          }
+        }
+      }
+    } else {
+      // Tiros dos inimigos contra jogador
+      let dx = b.x - player.x;
+      let dy = b.y - (player.y - player.height / 2);
+      if (Math.abs(dx) < 30 && Math.abs(dy) < 40) {
+        if (shield > 0) shield -= 25;
+        else player.health -= b.isBoss ? 10 : 5;
+        bullets.splice(bi, 1);
+      }
+    }
+  });
+
+  // Colisão com power-ups
+  powerups.forEach((p, pi) => {
+    if (Math.abs(p.x - player.x) < 30 && Math.abs(p.y - player.y) < 50) {
+      if (p.type === "speed") shootCooldown = 200;
+      if (p.type === "shield") shield = 25;
+      if (p.type === "health") player.health = Math.min(player.health + 25, 100);
+      
+      powerupMessages.push({
+        text: p.message,
+        time: Date.now()
+      });
+      
+      powerups.splice(pi, 1);
+    }
+  });
+
+  // Colisão com aliens
+  aliens.forEach((a, ai) => {
+    let dx = player.x - a.x;
+    if (Math.abs(dx) < 40 && Math.abs(player.y - a.y) < 50) {
+      player.health -= { green: 10, yellow: 15, red: 20 }[a.type];
+      aliens.splice(ai, 1);
+    }
+  });
+
+  if (player.health <= 0) {
+    document.getElementById("deathSound").play();
+    gameOver = true;
+  }
+}
+
+function spawnHorde() {
+  for (let i = 0; i < 3; i++) {
+    setTimeout(() => spawnAlien(), i * 500);
+  }
+}
+
+function spawnPowerUp(x, y) {
+  const types = ["speed", "shield", "health"];
+  const type = types[Math.floor(Math.random() * types.length)];
+  powerups.push(new PowerUp(x, y, type));
+}
+
+function alienFire() {
+  const now = Date.now();
+  aliens.forEach((a) => {
+    if (now - a.lastShot > 3000) {
+      let angle = Math.atan2((player.y - player.height / 2) - a.y, player.x - a.x);
+      bullets.push(new Bullet(a.x, a.y, angle, true));
+      a.lastShot = now;
+    }
+  });
+}
+
+function bossFire() {
+  if (!bossActive) return;
+  
+  const now = Date.now();
+  
+  // Tiros horizontais (2 em linha reta)
+  if (now - boss.lastHorizontalShot > 4000) {
+    for (let i = 0; i < 2; i++) {
+      let angle = Math.atan2(player.y - boss.y, player.x - boss.x);
+      bullets.push(new Bullet(boss.x, boss.y, angle, true, true));
+    }
+    boss.lastHorizontalShot = now;
+  }
+  
+  // Tiro vertical (do céu)
+  if (now - boss.lastVerticalShot > 5000) {
+    bullets.push(new Bullet(player.x + Math.random() * 100 - 50, 0, Math.PI/2, true, true));
+    boss.lastVerticalShot = now;
+  }
+}
+
+function drawBackground() {
+  // Desenha a imagem de fundo
+  if (backgroundImage.complete) {
+    ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+  } else {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  
+  // Desenha o chão
+  ctx.fillStyle = "rgba(0, 100, 0, 0.7)";
+  ctx.fillRect(0, floor, canvas.width, canvas.height - floor);
+}
+
+function drawHUD() {
+  // Barra de vida
+  ctx.fillStyle = "white";
+  ctx.fillRect(20, 20, 200, 20);
+  ctx.fillStyle = "red";
+  ctx.fillRect(20, 20, 2 * player.health, 20);
+  ctx.strokeStyle = "black";
+  ctx.strokeRect(20, 20, 200, 20);
+  
+  // Pontuação
+  ctx.fillStyle = "white";
+  ctx.font = "20px sans-serif";
+  ctx.fillText("Pontuação: " + score, 20, 70);
+  
+  // Escudo
+  if (shield > 0) {
+    ctx.fillStyle = "yellow";
+    ctx.fillText("Escudo: " + shield + "%", 20, 100);
+  }
+  
+  // Mensagens de power-up
+  const now = Date.now();
+  powerupMessages.forEach((msg, i) => {
+    if (now - msg.time < 3000) {
+      ctx.fillStyle = "white";
+      ctx.font = "20px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(msg.text, canvas.width / 2, 50);
+    } else {
+      powerupMessages.splice(i, 1);
+    }
+  });
+  
+  // Indicador de boss
+  if (bossActive) {
+    ctx.fillStyle = "red";
+    ctx.font = "30px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("BOSS!", canvas.width / 2, 100);
+  }
+}
+
+function drawGameOver() {
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "white";
+  ctx.font = "60px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("VOCÊ MORREU", canvas.width / 2, canvas.height / 2);
+  ctx.font = "30px sans-serif";
+  ctx.fillText("Pontuação Final: " + score, canvas.width / 2, canvas.height / 2 + 60);
+  ctx.fillText("Clique para recomeçar", canvas.width / 2, canvas.height / 2 + 120);
+}
+
+function gameLoop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawBackground();
+
+  if (!gameOver) {
+    player.update();
+    player.draw();
+
+    bullets.forEach(b => {
+      b.update();
+      b.draw();
+    });
+
+    aliens.forEach(a => {
+      a.update();
+      a.draw();
+    });
+
+    if (bossActive) {
+      boss.update();
+      boss.draw();
+      bossFire();
+    }
+
+    powerups.forEach(p => p.draw());
+
+    alienFire();
+    checkCollisions();
+    drawHUD();
+    requestAnimationFrame(gameLoop);
+  } else {
+    drawGameOver();
+  }
+}
+
+function restartGame() {
+  player = new Player();
+  bullets = [];
+  aliens = [];
+  powerups = [];
+  powerupMessages = [];
+  gameOver = false;
+  score = 0;
+  kills = 0;
+  shield = 0;
+  shootCooldown = 500;
+  bossActive = false;
+  boss = null;
+  spawnHorde();
+  gameLoop();
+}
+
+// Inicialização do jogo
+loadImages().then(() => {
+  spawnHorde();
+  gameLoop();
+});
+
+// Controles
+document.addEventListener("keydown", e => keys[e.code] = true);
+document.addEventListener("keyup", e => keys[e.code] = false);
+
+canvas.addEventListener("mousemove", e => {
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+});
+
+canvas.addEventListener("click", e => {
+  if (gameOver) {
+    restartGame();
+    return;
+  }
+  const now = Date.now();
+  if (now - lastPlayerShot > shootCooldown) {
+    let angle = Math.atan2(mouseY - (player.y - player.height / 2), mouseX - player.x);
+    bullets.push(new Bullet(player.x + 20, player.y - 30, angle));
+    lastPlayerShot = now;
+    document.getElementById("shootSound").play();
+  }
+});
+
+window.addEventListener("resize", () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  floor = canvas.height - 50;
+});
+</script>
+</body>
+</html>
