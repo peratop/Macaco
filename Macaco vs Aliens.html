@@ -12,11 +12,8 @@
 <canvas id="game"></canvas>
 
 <audio id="shootSound" src="https://www.soundjay.com/mechanical/sounds/mechanical-clonk-1.mp3"></audio>
-
 <audio id="backgroundMusic" src="https://www.soundjay.com/free-music/sounds/jungle-run-01.mp3" loop></audio>
-
 <audio id="victorySound" src="https://www.soundjay.com/human/sounds/applause-8.mp3"></audio>
-
 <audio id="looseSound" src="https://www.soundjay.com/human/sounds/man-scream-01.mp3"></audio>
 
 <script>
@@ -25,11 +22,22 @@ const ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
+// Estados do jogo
+const GAME_STATES = {
+  ANIMATION: 'animation',
+  MENU: 'menu',
+  ABOUT: 'about',
+  PLAYING: 'playing',
+  GAME_OVER: 'game_over'
+};
+
+let currentState = GAME_STATES.ANIMATION;
+
 // Variáveis do jogo
 let keys = {}, mouseX = canvas.width / 2, mouseY = canvas.height / 2;
 let gravity = 1, floor = canvas.height - 50;
 let lastPlayerShot = 0, gameOver = false;
-let gameWon = false; // Nova variável para indicar vitória
+let gameWon = false;
 let score = 0, kills = 0;
 let powerups = [], powerupMessages = [];
 let shootCooldown = 500;
@@ -39,6 +47,51 @@ let boss = null;
 let images = {};
 let backgroundImage = new Image();
 backgroundImage.src = 'fundojogo.jpg';
+
+// Imagens para animação e menu
+let animationVideo = document.createElement('video');
+let menuImage = new Image();
+
+// AQUI VOCÊ DEVE LINKAR SUAS IMAGENS/VÍDEO:
+animationVideo.src = 'animacao.mp4'; // Substitua pelo caminho do seu vídeo
+animationVideo.muted = false; // Habilita o áudio
+animationVideo.volume = 0.3; // Define volume (0.0 a 1.0)
+animationVideo.loop = false; // Não repetir o vídeo
+animationVideo.autoplay = true; // Permite autoplay
+animationVideo.playsInline = true; // Para dispositivos móveis
+menuImage.src = 'menu.jpeg'; // Substitua pelo caminho da sua imagem de menu
+
+// Controle de tempo para animação
+let animationStartTime = Date.now();
+let animationVideoLoaded = false;
+let videoPlayAttempted = false;
+let showClickMessage = true; // Controla se deve mostrar a mensagem de clique
+
+// Carrega e prepara o vídeo
+animationVideo.addEventListener('loadeddata', () => {
+  animationVideoLoaded = true;
+  animationVideo.currentTime = 0;
+});
+
+// Detecta quando o vídeo termina
+animationVideo.addEventListener('ended', () => {
+  currentState = GAME_STATES.MENU;
+});
+
+// Tenta reproduzir o vídeo assim que possível
+animationVideo.addEventListener('canplay', () => {
+  if (!videoPlayAttempted && currentState === GAME_STATES.ANIMATION) {
+    videoPlayAttempted = true;
+    animationVideo.play().then(() => {
+      // Se o vídeo começou automaticamente, esconde a mensagem
+      showClickMessage = false;
+    }).catch(e => {
+      console.log("Autoplay bloqueado pelo navegador:", e);
+      // Mantém a mensagem visível se o autoplay falhar
+      showClickMessage = true;
+    });
+  }
+});
 
 // Controle de áudio
 let musicStarted = false;
@@ -73,7 +126,7 @@ function loadImages() {
 function startBackgroundMusic() {
   if (!musicStarted) {
     const bgMusic = document.getElementById("backgroundMusic");
-    bgMusic.volume = 0.3; // Volume baixo para não incomodar
+    bgMusic.volume = 0.3;
     bgMusic.play().catch(e => console.log("Erro ao tocar música:", e));
     musicStarted = true;
   }
@@ -97,6 +150,158 @@ function playLooseSound() {
   const victorySound = document.getElementById("looseSound");
   victorySound.volume = 0.7;
   victorySound.play().catch(e => console.log("Erro ao tocar som de derrota:", e));
+}
+
+// Função para voltar ao menu
+function returnToMenu() {
+  stopBackgroundMusic();
+  musicStarted = false;
+  currentState = GAME_STATES.MENU;
+}
+
+// Função para desenhar a animação inicial
+function drawAnimation() {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  if (animationVideoLoaded && animationVideo.readyState >= 2) {
+    // Centraliza o vídeo na tela mantendo proporção original
+    const videoAspect = animationVideo.videoWidth / animationVideo.videoHeight;
+    const canvasAspect = canvas.width / canvas.height;
+    
+    let drawWidth, drawHeight, drawX, drawY;
+    
+    if (videoAspect > canvasAspect) {
+      // Vídeo é mais largo - ajusta pela largura
+      drawWidth = canvas.width;
+      drawHeight = drawWidth / videoAspect;
+    } else {
+      // Vídeo é mais alto - ajusta pela altura
+      drawHeight = canvas.height;
+      drawWidth = drawHeight * videoAspect;
+    }
+    
+    // Centraliza o vídeo
+    drawX = (canvas.width - drawWidth) / 2;
+    drawY = (canvas.height - drawHeight) / 2;
+    
+    ctx.drawImage(animationVideo, drawX, drawY, drawWidth, drawHeight);
+    
+    // Mostra a mensagem de clique na área preta à esquerda (se houver)
+    if (showClickMessage && drawX > 0) {
+      ctx.fillStyle = "white";
+      ctx.font = "24px sans-serif";
+      ctx.textAlign = "center";
+      
+      // Quebra o texto em múltiplas linhas
+      const messageLines = [
+        "CLIQUE EM",
+        "QUALQUER LUGAR",
+        "DA TELA PARA",
+        "COMEÇAR"
+      ];
+      
+      const lineHeight = 30;
+      const startY = canvas.height / 2 - (messageLines.length * lineHeight) / 2;
+      
+      messageLines.forEach((line, index) => {
+        ctx.fillText(line, drawX / 2, startY + (index * lineHeight));
+      });
+    }
+    
+  } else {
+    // Fallback enquanto o vídeo carrega
+    ctx.fillStyle = "white";
+    ctx.font = "48px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("MACACO VS ALIENS", canvas.width / 2, canvas.height / 2);
+    ctx.font = "24px sans-serif";
+    ctx.fillText("Carregando...", canvas.width / 2, canvas.height / 2 + 60);
+  }
+}
+
+// Função para desenhar o menu
+function drawMenu() {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  if (menuImage.complete) {
+    // Mantém a proporção original da imagem do menu
+    const imgAspect = menuImage.width / menuImage.height;
+    const canvasAspect = canvas.width / canvas.height;
+    
+    let drawWidth, drawHeight, drawX, drawY;
+    
+    if (imgAspect > canvasAspect) {
+      // Imagem é mais larga - ajusta pela largura
+      drawWidth = canvas.width;
+      drawHeight = drawWidth / imgAspect;
+    } else {
+      // Imagem é mais alta - ajusta pela altura
+      drawHeight = canvas.height;
+      drawWidth = drawHeight * imgAspect;
+    }
+    
+    // Centraliza a imagem
+    drawX = (canvas.width - drawWidth) / 2;
+    drawY = (canvas.height - drawHeight) / 2;
+    
+    // Preenche o fundo com preto caso a imagem não cubra toda a tela
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Desenha a imagem mantendo proporção
+    ctx.drawImage(menuImage, drawX, drawY, drawWidth, drawHeight);
+  } else {
+    // Fallback se a imagem não carregar
+    ctx.fillStyle = "#001122";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = "white";
+    ctx.font = "48px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("MACACO VS ALIENS", canvas.width / 2, canvas.height / 2 - 100);
+  }
+  
+  // Desenha as opções do menu por cima da imagem
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  ctx.fillRect(canvas.width / 2 - 250, canvas.height / 2 + 50, 500, 60);
+
+  ctx.fillStyle = "white";
+  ctx.font = "32px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("Pressione ESPAÇO para Iniciar", canvas.width / 2, canvas.height / 2 + 90);
+
+  // Texto "Sobre" na parte de baixo da tela
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  ctx.fillRect(canvas.width / 2 - 90, canvas.height - 80, 180, 40);
+  ctx.fillStyle = "white";
+  ctx.font = "24px sans-serif";
+  ctx.fillText('Sobre (S)', canvas.width / 2, canvas.height - 50);
+}
+
+// Função para desenhar a tela "Sobre"
+function drawAbout() {
+  ctx.fillStyle = "#001122";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  ctx.fillStyle = "white";
+  ctx.font = "48px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("SOBRE O JOGO", canvas.width / 2, canvas.height / 2 - 150);
+  
+  ctx.font = "32px sans-serif";
+  ctx.fillText("Desenvolvido por:", canvas.width / 2, canvas.height / 2 - 80);
+  
+  ctx.font = "28px sans-serif";
+  ctx.fillStyle = "#FFD700";
+  ctx.fillText("Leonardo Pereira", canvas.width / 2, canvas.height / 2 - 30);
+  ctx.fillText("Gustavo Henrique Schott", canvas.width / 2, canvas.height / 2 + 10);
+  ctx.fillText("Eduardo Erthal", canvas.width / 2, canvas.height / 2 + 50);
+  
+  ctx.fillStyle = "white";
+  ctx.font = "24px sans-serif";
+  ctx.fillText("Pressione ESC para voltar ao menu", canvas.width / 2, canvas.height / 2 + 120);
 }
 
 class Player {
@@ -138,7 +343,7 @@ class Player {
 class Alien {
   constructor(x, type) {
     this.x = x;
-    this.y = Math.random() * (canvas.height - 300) + 100; // Posição inicial mais controlada
+    this.y = Math.random() * (canvas.height - 300) + 100;
     this.width = 50; this.height = 50;
     this.type = type;
     this.hp = { green: 1, yellow: 3, red: 5 }[type];
@@ -146,30 +351,24 @@ class Alien {
     this.color = { green: "green", yellow: "yellow", red: "red" }[type];
     this.lastShot = 0;
     
-    // Sistema de movimento aleatório melhorado
-    this.speed = 1.5 + Math.random() * 1.5; // Velocidade horizontal
-    this.vx = -this.speed; // Sempre se move para a esquerda
-    this.vy = 0; // Velocidade vertical
+    this.speed = 1.5 + Math.random() * 1.5;
+    this.vx = -this.speed;
+    this.vy = 0;
     
-    // Controle de direção vertical
     this.verticalSpeed = 0.5 + Math.random() * 1;
     this.verticalDirection = Math.random() > 0.5 ? 1 : -1;
     this.changeDirectionTimer = 0;
-    this.changeDirectionInterval = 60 + Math.random() * 120; // Muda direção a cada 1-3 segundos
+    this.changeDirectionInterval = 60 + Math.random() * 120;
     
-    // Limites de movimento vertical
     this.minY = 50;
     this.maxY = canvas.height - 150;
   }
   
   update() {
-    // Movimento horizontal constante
     this.x += this.vx;
     
-    // Sistema de movimento vertical aleatório
     this.changeDirectionTimer++;
     
-    // Muda direção vertical aleatoriamente ou quando atinge limites
     if (this.changeDirectionTimer >= this.changeDirectionInterval || 
         this.y <= this.minY || this.y >= this.maxY) {
       
@@ -179,11 +378,9 @@ class Alien {
       this.verticalSpeed = 0.5 + Math.random() * 1.5;
     }
     
-    // Aplica movimento vertical
     this.vy = this.verticalDirection * this.verticalSpeed;
     this.y += this.vy;
     
-    // Garante que não saia dos limites
     if (this.y < this.minY) {
       this.y = this.minY;
       this.verticalDirection = 1;
@@ -193,7 +390,6 @@ class Alien {
       this.verticalDirection = -1;
     }
     
-    // Se sair da tela pela esquerda, reposiciona na direita
     if (this.x < -this.width) {
       this.x = canvas.width + Math.random() * 200;
       this.y = Math.random() * (this.maxY - this.minY) + this.minY;
@@ -213,7 +409,6 @@ class Alien {
       ctx.fill();
     }
     
-    // Barra de HP
     if (this.hp < this.maxHp) {
       ctx.fillStyle = "red";
       ctx.fillRect(this.x - this.width/2, this.y - this.height/2 - 10, this.width, 5);
@@ -233,7 +428,6 @@ class Boss {
     this.lastHorizontalShot = 0;
     this.lastVerticalShot = 0;
     
-    // Movimento controlado do boss
     this.vy = 0;
     this.verticalDirection = 1;
     this.verticalSpeed = 1;
@@ -243,11 +437,9 @@ class Boss {
   }
   
   update() {
-    // Movimento horizontal
     this.x -= 1;
     if (this.x < canvas.width - 300) this.x = canvas.width - 300;
     
-    // Movimento vertical controlado
     this.changeDirectionTimer++;
     
     if (this.changeDirectionTimer >= 120 || this.y <= this.minY || this.y >= this.maxY) {
@@ -258,7 +450,6 @@ class Boss {
     this.vy = this.verticalDirection * this.verticalSpeed;
     this.y += this.vy;
     
-    // Limites
     if (this.y < this.minY) {
       this.y = this.minY;
       this.verticalDirection = 1;
@@ -277,7 +468,6 @@ class Boss {
       ctx.fillRect(this.x - this.width/2, this.y - this.height/2, this.width, this.height);
     }
     
-    // Barra de HP
     ctx.fillStyle = "red";
     ctx.fillRect(this.x - this.width/2, this.y - this.height/2 - 15, this.width, 10);
     ctx.fillStyle = "lime";
@@ -354,7 +544,6 @@ function spawnBoss() {
 function checkCollisions() {
   bullets.forEach((b, bi) => {
     if (!b.isAlien && !b.isBoss) {
-      // Tiros do jogador contra aliens
       aliens.forEach((a, ai) => {
         let dx = b.x - a.x;
         let dy = b.y - a.y;
@@ -367,13 +556,11 @@ function checkCollisions() {
             score++;
             kills++;
             
-            // A cada 3 kills, spawna nova horda e dá power-up
             if (kills % 3 === 0) {
               spawnHorde();
               spawnPowerUp(a.x, a.y);
             }
             
-            // Checar se precisa spawnar boss
             if (score >= 12 && !bossActive) {
               spawnBoss();
             }
@@ -381,7 +568,6 @@ function checkCollisions() {
         }
       });
       
-      // Tiros do jogador contra boss
       if (bossActive) {
         let dx = b.x - boss.x;
         let dy = b.y - boss.y;
@@ -391,16 +577,15 @@ function checkCollisions() {
           bullets.splice(bi, 1);
           if (boss.hp <= 0) {
             bossActive = false;
-            score += 5; // Bônus por matar o boss
-            gameOver = true; // Ativa tela de fim de jogo
-            gameWon = true; // Nova variável para indicar vitória
-            stopBackgroundMusic(); // Para a música de fundo
-            playVictorySound(); // Toca som de vitória
+            score += 5;
+            currentState = GAME_STATES.GAME_OVER;
+            gameWon = true;
+            stopBackgroundMusic();
+            playVictorySound();
           }
         }
       }
     } else {
-      // Tiros dos inimigos contra jogador
       let dx = b.x - player.x;
       let dy = b.y - (player.y - player.height / 2);
       if (Math.abs(dx) < 30 && Math.abs(dy) < 40) {
@@ -411,7 +596,6 @@ function checkCollisions() {
     }
   });
 
-  // Colisão com power-ups
   powerups.forEach((p, pi) => {
     if (Math.abs(p.x - player.x) < 30 && Math.abs(p.y - player.y) < 50) {
       if (p.type === "speed") shootCooldown = 200;
@@ -427,7 +611,6 @@ function checkCollisions() {
     }
   });
 
-  // Colisão com aliens
   aliens.forEach((a, ai) => {
     let dx = player.x - a.x;
     if (Math.abs(dx) < 40 && Math.abs(player.y - a.y) < 50) {
@@ -438,8 +621,9 @@ function checkCollisions() {
 
   if (player.health <= 0) {
     stopBackgroundMusic();
-    playLooseSound()
-    gameOver = true;
+    playLooseSound();
+    currentState = GAME_STATES.GAME_OVER;
+    gameWon = false;
   }
 }
 
@@ -452,7 +636,7 @@ function spawnHorde() {
 function spawnPowerUp(x, y) {
   const types = ["speed", "shield", "health"];
   const type = types[Math.floor(Math.random() * types.length)];
-  powerups.push(new PowerUp(x, floor - 10, type)); // Sempre no chão
+  powerups.push(new PowerUp(x, floor - 10, type));
 }
 
 function alienFire() {
@@ -471,7 +655,6 @@ function bossFire() {
   
   const now = Date.now();
   
-  // Tiros horizontais (2 em linha reta)
   if (now - boss.lastHorizontalShot > 4000) {
     for (let i = 0; i < 2; i++) {
       let angle = Math.atan2(player.y - boss.y, player.x - boss.x);
@@ -480,7 +663,6 @@ function bossFire() {
     boss.lastHorizontalShot = now;
   }
   
-  // Tiro vertical (do céu)
   if (now - boss.lastVerticalShot > 5000) {
     bullets.push(new Bullet(player.x + Math.random() * 100 - 50, 0, Math.PI/2, true, true));
     boss.lastVerticalShot = now;
@@ -488,7 +670,6 @@ function bossFire() {
 }
 
 function drawBackground() {
-  // Desenha a imagem de fundo
   if (backgroundImage.complete) {
     ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
   } else {
@@ -496,13 +677,11 @@ function drawBackground() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
   
-  // Desenha o chão
   ctx.fillStyle = "rgba(0, 100, 0, 0.7)";
   ctx.fillRect(0, floor, canvas.width, canvas.height - floor);
 }
 
 function drawHUD() {
-  // Barra de vida
   ctx.fillStyle = "white";
   ctx.fillRect(20, 20, 200, 20);
   ctx.fillStyle = "red";
@@ -510,18 +689,24 @@ function drawHUD() {
   ctx.strokeStyle = "black";
   ctx.strokeRect(20, 20, 200, 20);
   
-  // Pontuação
   ctx.fillStyle = "white";
   ctx.font = "20px sans-serif";
+  ctx.textAlign = "left";
   ctx.fillText("Pontuação: " + score, 20, 70);
   
-  // Escudo
   if (shield > 0) {
     ctx.fillStyle = "yellow";
     ctx.fillText("Escudo: " + shield + "%", 20, 100);
   }
   
-  // Mensagens de power-up
+  // Botão ESC no canto superior direito durante o jogo
+  ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+  ctx.fillRect(canvas.width - 150, 20, 130, 40);
+  ctx.fillStyle = "white";
+  ctx.font = "18px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("ESC - Menu", canvas.width - 85, 45);
+  
   const now = Date.now();
   powerupMessages.forEach((msg, i) => {
     if (now - msg.time < 3000) {
@@ -534,7 +719,6 @@ function drawHUD() {
     }
   });
   
-  // Indicador de boss
   if (bossActive) {
     ctx.fillStyle = "red";
     ctx.font = "30px sans-serif";
@@ -553,65 +737,91 @@ function drawGameOver() {
   ctx.font = "30px sans-serif";
   ctx.fillText("Pontuação Final: " + score, canvas.width / 2, canvas.height / 2 + 60);
   ctx.fillText("Pressione ESPAÇO para recomeçar", canvas.width / 2, canvas.height / 2 + 120);
+  ctx.font = "24px sans-serif";
+  ctx.fillText("ESC para voltar ao menu", canvas.width / 2, canvas.height / 2 + 160);
 }
 
 function gameLoop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawBackground();
+  
+  switch(currentState) {
+    case GAME_STATES.ANIMATION:
+      drawAnimation();
+      // O vídeo automaticamente muda para MENU quando termina via event listener
+      break;
+      
+    case GAME_STATES.MENU:
+      drawMenu();
+      break;
+      
+    case GAME_STATES.ABOUT:
+      drawAbout();
+      break;
+      
+    case GAME_STATES.PLAYING:
+      drawBackground();
+      
+      player.update();
+      player.draw();
 
-  if (!gameOver) {
-    player.update();
-    player.draw();
+      bullets.forEach(b => {
+        b.update();
+        b.draw();
+      });
 
-    bullets.forEach(b => {
-      b.update();
-      b.draw();
-    });
+      aliens.forEach(a => {
+        a.update();
+        a.draw();
+      });
 
-    aliens.forEach(a => {
-      a.update();
-      a.draw();
-    });
+      if (bossActive) {
+        boss.update();
+        boss.draw();
+        bossFire();
+      }
 
-    if (bossActive) {
-      boss.update();
-      boss.draw();
-      bossFire();
-    }
+      powerups.forEach(p => p.draw());
 
-    powerups.forEach(p => p.draw());
-
-    alienFire();
-    checkCollisions();
-    drawHUD();
-    requestAnimationFrame(gameLoop);
-  } else {
-    drawGameOver();
+      alienFire();
+      checkCollisions();
+      drawHUD();
+      break;
+      
+    case GAME_STATES.GAME_OVER:
+      drawBackground();
+      drawGameOver();
+      break;
   }
+  
+  requestAnimationFrame(gameLoop);
 }
 
-function restartGame() {
+function startGame() {
   player = new Player();
   bullets = [];
   aliens = [];
   powerups = [];
   powerupMessages = [];
   gameOver = false;
-  gameWon = false; // Reseta estado de vitória
+  gameWon = false;
   score = 0;
   kills = 0;
   shield = 0;
   shootCooldown = 500;
   bossActive = false;
   boss = null;
-  musicStarted = false; // Permite reiniciar a música
+  currentState = GAME_STATES.PLAYING;
+  startBackgroundMusic();
   spawnHorde();
-  gameLoop();
+}
+
+function restartGame() {
+  musicStarted = false;
+  startGame();
 }
 
 // Inicialização do jogo
 loadImages().then(() => {
-  spawnHorde();
   gameLoop();
 });
 
@@ -620,15 +830,44 @@ document.addEventListener("keyup", e => keys[e.code] = false);
 
 // Controle de teclas com funcionalidades especiais
 document.addEventListener("keydown", e => {
-  keys[e.code] = true;
-  
-  // Inicia música na primeira interação
-  startBackgroundMusic();
-  
-  // Reinicia o jogo com Espaço quando estiver na tela de game over
-  if (e.code === "Space" && gameOver) {
-    e.preventDefault(); // Evita scroll da página
-    restartGame();
+  switch(currentState) {
+    case GAME_STATES.ANIMATION:
+      // BLOQUEADO: Nenhuma tecla funciona durante a animação
+      // A animação só termina quando o vídeo acabar automaticamente
+      break;
+      
+    case GAME_STATES.MENU:
+      if (e.code === "Space") {
+        e.preventDefault();
+        startGame();
+      } else if (e.code === "KeyS") {
+        currentState = GAME_STATES.ABOUT;
+      }
+      break;
+      
+    case GAME_STATES.ABOUT:
+      if (e.code === "Escape") {
+        currentState = GAME_STATES.MENU;
+      }
+      break;
+      
+    case GAME_STATES.PLAYING:
+      if (e.code === "Escape") {
+        returnToMenu();
+      } else {
+        keys[e.code] = true;
+        startBackgroundMusic();
+      }
+      break;
+      
+    case GAME_STATES.GAME_OVER:
+      if (e.code === "Space") {
+        e.preventDefault();
+        restartGame();
+      } else if (e.code === "Escape") {
+        returnToMenu();
+      }
+      break;
   }
 });
 
@@ -637,18 +876,26 @@ canvas.addEventListener("mousemove", e => {
   mouseY = e.clientY;
 });
 
-// Controle de tiro com mouse (sem restart)
+// Controle de tiro com mouse
 canvas.addEventListener("click", e => {
-  // Inicia música na primeira interação do usuário
-  startBackgroundMusic();
+  // Se estiver na animação e o vídeo não começou por causa do autoplay bloqueado
+  if (currentState === GAME_STATES.ANIMATION && animationVideo.paused) {
+    animationVideo.play().then(() => {
+      showClickMessage = false; // Esconde a mensagem após clicar
+    }).catch(err => console.log("Erro ao iniciar vídeo:", err));
+    return;
+  }
   
-  // Remove a condição de restart aqui - agora só atira
-  const now = Date.now();
-  if (!gameOver && now - lastPlayerShot > shootCooldown) {
-    let angle = Math.atan2(mouseY - (player.y - player.height / 2), mouseX - player.x);
-    bullets.push(new Bullet(player.x + 20, player.y - 30, angle));
-    lastPlayerShot = now;
-    document.getElementById("shootSound").play();
+  if (currentState === GAME_STATES.PLAYING) {
+    startBackgroundMusic();
+    
+    const now = Date.now();
+    if (now - lastPlayerShot > shootCooldown) {
+      let angle = Math.atan2(mouseY - (player.y - player.height / 2), mouseX - player.x);
+      bullets.push(new Bullet(player.x + 20, player.y - 30, angle));
+      lastPlayerShot = now;
+      document.getElementById("shootSound").play();
+    }
   }
 });
 
