@@ -52,10 +52,10 @@ backgroundImage.src = 'fundojogo.jpg';
 let animationVideo = document.createElement('video');
 let menuImage = new Image();
 
-// AQUI VOCÊ DEVE LINKAR SUAS IMAGENS/VÍDEO:
-animationVideo.src = 'animacao.mp4'; // Substitua pelo caminho do seu vídeo
+// Configurações da animação
+animationVideo.src = 'animacao.mp4'; // Coloca a src do vídeo
 animationVideo.muted = false; // Habilita o áudio
-animationVideo.volume = 0.3; // Define volume (0.0 a 1.0)
+animationVideo.volume = 0.3; // Define volume 
 animationVideo.loop = false; // Não repetir o vídeo
 animationVideo.autoplay = true; // Permite autoplay
 animationVideo.playsInline = true; // Para dispositivos móveis
@@ -146,6 +146,7 @@ function playVictorySound() {
   victorySound.play().catch(e => console.log("Erro ao tocar som de vitória:", e));
 }
 
+// Função para tocar som de derrota
 function playLooseSound() {
   const victorySound = document.getElementById("looseSound");
   victorySound.volume = 0.7;
@@ -165,29 +166,28 @@ function drawAnimation() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
   if (animationVideoLoaded && animationVideo.readyState >= 2) {
-    // Centraliza o vídeo na tela mantendo proporção original
+  
     const videoAspect = animationVideo.videoWidth / animationVideo.videoHeight;
     const canvasAspect = canvas.width / canvas.height;
     
     let drawWidth, drawHeight, drawX, drawY;
     
     if (videoAspect > canvasAspect) {
-      // Vídeo é mais largo - ajusta pela largura
+      
       drawWidth = canvas.width;
       drawHeight = drawWidth / videoAspect;
     } else {
-      // Vídeo é mais alto - ajusta pela altura
+      
       drawHeight = canvas.height;
       drawWidth = drawHeight * videoAspect;
     }
     
-    // Centraliza o vídeo
     drawX = (canvas.width - drawWidth) / 2;
     drawY = (canvas.height - drawHeight) / 2;
     
     ctx.drawImage(animationVideo, drawX, drawY, drawWidth, drawHeight);
     
-    // Mostra a mensagem de clique na área preta à esquerda (se houver)
+    // Mostra a mensagem de clique
     if (showClickMessage && drawX > 0) {
       ctx.fillStyle = "white";
       ctx.font = "24px sans-serif";
@@ -226,23 +226,23 @@ function drawMenu() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
   if (menuImage.complete) {
-    // Mantém a proporção original da imagem do menu
+    
     const imgAspect = menuImage.width / menuImage.height;
     const canvasAspect = canvas.width / canvas.height;
     
     let drawWidth, drawHeight, drawX, drawY;
     
     if (imgAspect > canvasAspect) {
-      // Imagem é mais larga - ajusta pela largura
+      
       drawWidth = canvas.width;
       drawHeight = drawWidth / imgAspect;
     } else {
-      // Imagem é mais alta - ajusta pela altura
+     
       drawHeight = canvas.height;
       drawWidth = drawHeight * imgAspect;
     }
     
-    // Centraliza a imagem
+    
     drawX = (canvas.width - drawWidth) / 2;
     drawY = (canvas.height - drawHeight) / 2;
     
@@ -250,7 +250,7 @@ function drawMenu() {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Desenha a imagem mantendo proporção
+    
     ctx.drawImage(menuImage, drawX, drawY, drawWidth, drawHeight);
   } else {
     // Fallback se a imagem não carregar
@@ -304,6 +304,8 @@ function drawAbout() {
   ctx.fillText("Pressione ESC para voltar ao menu", canvas.width / 2, canvas.height / 2 + 120);
 }
 
+
+// Objetos utilizando class
 class Player {
   constructor() {
     this.x = 100; this.y = floor;
@@ -523,10 +525,12 @@ class PowerUp {
   }
 }
 
+
 let player = new Player();
 let bullets = [];
 let aliens = [];
 
+//Função parra spawnar o Alien
 function spawnAlien() {
   if (bossActive || aliens.length >= 5) return;
   
@@ -535,12 +539,13 @@ function spawnAlien() {
   
   aliens.push(new Alien(canvas.width + Math.random() * 200, type));
 }
-
+// Função para spawnar o boss
 function spawnBoss() {
   bossActive = true;
   boss = new Boss();
 }
 
+// Lógica dos Aliens
 function checkCollisions() {
   bullets.forEach((b, bi) => {
     if (!b.isAlien && !b.isBoss) {
@@ -627,18 +632,21 @@ function checkCollisions() {
   }
 }
 
+// Função para spawnar vários aliens
 function spawnHorde() {
   for (let i = 0; i < 3; i++) {
     setTimeout(() => spawnAlien(), i * 500);
   }
 }
 
+// Função para spawnar os power ups
 function spawnPowerUp(x, y) {
   const types = ["speed", "shield", "health"];
   const type = types[Math.floor(Math.random() * types.length)];
   powerups.push(new PowerUp(x, floor - 10, type));
 }
 
+// Função do tiro do Alien
 function alienFire() {
   const now = Date.now();
   aliens.forEach((a) => {
@@ -650,6 +658,8 @@ function alienFire() {
   });
 }
 
+
+// Função do tiro do Boss
 function bossFire() {
   if (!bossActive) return;
   
@@ -669,6 +679,7 @@ function bossFire() {
   }
 }
 
+// Desenha o background do game
 function drawBackground() {
   if (backgroundImage.complete) {
     ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
@@ -681,6 +692,7 @@ function drawBackground() {
   ctx.fillRect(0, floor, canvas.width, canvas.height - floor);
 }
 
+// Desenha as informações tipo: vida; pontuação; ESC para voltar ao menu
 function drawHUD() {
   ctx.fillStyle = "white";
   ctx.fillRect(20, 20, 200, 20);
@@ -699,7 +711,6 @@ function drawHUD() {
     ctx.fillText("Escudo: " + shield + "%", 20, 100);
   }
   
-  // Botão ESC no canto superior direito durante o jogo
   ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
   ctx.fillRect(canvas.width - 150, 20, 130, 40);
   ctx.fillStyle = "white";
@@ -727,6 +738,7 @@ function drawHUD() {
   }
 }
 
+// Tela de game over
 function drawGameOver() {
   ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -741,13 +753,13 @@ function drawGameOver() {
   ctx.fillText("ESC para voltar ao menu", canvas.width / 2, canvas.height / 2 + 160);
 }
 
+// Lógica das telas
 function gameLoop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   
   switch(currentState) {
     case GAME_STATES.ANIMATION:
       drawAnimation();
-      // O vídeo automaticamente muda para MENU quando termina via event listener
       break;
       
     case GAME_STATES.MENU:
@@ -796,6 +808,7 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
+// Função que inicia algumas variaveis do jogo
 function startGame() {
   player = new Player();
   bullets = [];
@@ -832,7 +845,7 @@ document.addEventListener("keyup", e => keys[e.code] = false);
 document.addEventListener("keydown", e => {
   switch(currentState) {
     case GAME_STATES.ANIMATION:
-      // BLOQUEADO: Nenhuma tecla funciona durante a animação
+      // Nenhuma tecla funciona durante a animação
       // A animação só termina quando o vídeo acabar automaticamente
       break;
       
@@ -876,12 +889,11 @@ canvas.addEventListener("mousemove", e => {
   mouseY = e.clientY;
 });
 
-// Controle de tiro com mouse
+// Eventos de click
 canvas.addEventListener("click", e => {
-  // Se estiver na animação e o vídeo não começou por causa do autoplay bloqueado
   if (currentState === GAME_STATES.ANIMATION && animationVideo.paused) {
     animationVideo.play().then(() => {
-      showClickMessage = false; // Esconde a mensagem após clicar
+      showClickMessage = false; 
     }).catch(err => console.log("Erro ao iniciar vídeo:", err));
     return;
   }
