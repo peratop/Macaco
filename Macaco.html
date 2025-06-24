@@ -83,11 +83,9 @@ animationVideo.addEventListener('canplay', () => {
   if (!videoPlayAttempted && currentState === GAME_STATES.ANIMATION) {
     videoPlayAttempted = true;
     animationVideo.play().then(() => {
-      // Se o vídeo começou automaticamente, esconde a mensagem
       showClickMessage = false;
     }).catch(e => {
       console.log("Autoplay bloqueado pelo navegador:", e);
-      // Mantém a mensagem visível se o autoplay falhar
       showClickMessage = true;
     });
   }
@@ -193,7 +191,6 @@ function drawAnimation() {
       ctx.font = "24px sans-serif";
       ctx.textAlign = "center";
       
-      // Quebra o texto em múltiplas linhas
       const messageLines = [
         "CLIQUE EM",
         "QUALQUER LUGAR",
