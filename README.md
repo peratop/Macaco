@@ -2,6 +2,8 @@
 
 Um jogo de ação desenvolvido em HTML5 Canvas onde você controla um macaco que deve defender-se contra uma invasão alienígena!
 
+Vídeo sobre o projeto disponível em: https://youtu.be/tu8mFbgcLrM
+
 ## 👥 Desenvolvedores
 
 - **Gustavo Henrique Schott**
