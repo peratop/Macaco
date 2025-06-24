@@ -84,9 +84,4 @@ O jogo utiliza sons online para:
 - Música de fundo
 - Sons de vitória e derrota
 
-## 🌐 Compatibilidade
-
-- Funciona em qualquer navegador moderno
-- Recomendado: Chrome, Firefox, Safari, Edge
-
 ---
